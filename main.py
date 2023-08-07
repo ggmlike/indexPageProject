@@ -4,46 +4,55 @@ import requests
 from google.auth.transport.requests import Request as GoogleRequest
 from google.oauth2 import service_account
 
-indexing_account = service_account.Credentials.from_service_account_file('service_account.json', scopes=['https://www'
-                                                                                                         '.googleapis'
-                                                                                                         '.com/auth'
-                                                                                                         '/indexing'])
 
-
-
-with open('urls.txt', 'r') as file:
-    bathc = file.read().splitlines()
-
-items = [
-    {
-        'Content-type': 'application/http',
-        'Content-ID': '',
-        'body': (
-            f"POST /v3/urlNotifications:publish HTTP/1.1\n"
-            f"Content-Type: application/json\n\n"
-            f"{json.dumps({'url': line, 'type': 'URL_UPDATED'})}"
+class GoogleIndexingPage:
+    def __init__(self, service_account_file):
+        self.account_for_indexing = service_account.Credentials.from_service_account_file(
+            service_account_file,
+            scopes=['https://www.googleapis.com/auth/indexing']
         )
-    }
-    for line in bathc
-]
 
-urlRequest = 'https://indexing.googleapis.com/batch'
-headers = {'Content-type': 'multipart/related; boundary=BOUNDARY'}
+    def listing_index_urls(self, file_name_url):
+        with open(file_name_url, 'r') as file:
+            urls = file.read().splitlines()
 
-request_object = GoogleRequest()
-indexing_account.refresh(request_object)
+        items = [
+            {
+                'Content-type': 'application/http',
+                'Content-ID': f'response-{index}',
+                'body': (
+                    f"POST /v3/urlNotifications:publish HTTP/1.1\n"
+                    f"Content-Type: application/json\n\n"
+                    f"{json.dumps({'url': url, 'type': 'URL_UPDATED'})}"
+                )
+            }
+            for index, url in enumerate(urls)
+        ]
 
-boundary = 'BOUNDARY'
-body_parts = [f'--{boundary}\nContent-type: application/http\nContent-ID: {index}\n\n{item["body"]}' for index, item in enumerate(items)]
-body = "\n".join(body_parts) + f'\n--{boundary}--\n'
+        url_request = 'https://indexing.googleapis.com/batch'
+        headers = {'Content-type': 'multipart/related; boundary=BOUNDARY'}
 
-options = {
-    'headers': {
-        'Authorization': f'Bearer {indexing_account.token}',
-        **headers
-    },
-    'data': body
-}
+        request_object = GoogleRequest()
+        self.account_for_indexing.refresh(request_object)
 
-response = requests.post(urlRequest, **options)
-print(response.text)
+        boundary = 'BOUNDARY'
+        body_parts = [f'--{boundary}\nContent-type: application/http\nContent-ID: {index}\n\n{item["body"]}' for
+                      index, item in enumerate(items)]
+        body = "\n".join(body_parts) + f'\n--{boundary}--\n'
+
+        options = {
+            'headers': {
+                'Authorization': f'Bearer {self.account_for_indexing.token}',
+                **headers
+            },
+            'data': body
+        }
+
+        response = requests.post(url_request, **options)
+        return response.text
+
+
+if __name__ == "__main__":
+    api = GoogleIndexingPage('service_account.json')
+    result = api.listing_index_urls('urls.txt')
+    print(result)
