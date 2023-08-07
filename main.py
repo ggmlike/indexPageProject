@@ -1,16 +1,49 @@
-# This is a sample Python script.
+import json
+import requests
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+from google.auth.transport.requests import Request as GoogleRequest
+from google.oauth2 import service_account
+
+indexing_account = service_account.Credentials.from_service_account_file('service_account.json', scopes=['https://www'
+                                                                                                         '.googleapis'
+                                                                                                         '.com/auth'
+                                                                                                         '/indexing'])
 
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
 
+with open('urls.txt', 'r') as file:
+    bathc = file.read().splitlines()
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+items = [
+    {
+        'Content-type': 'application/http',
+        'Content-ID': '',
+        'body': (
+            f"POST /v3/urlNotifications:publish HTTP/1.1\n"
+            f"Content-Type: application/json\n\n"
+            f"{json.dumps({'url': line, 'type': 'URL_UPDATED'})}"
+        )
+    }
+    for line in bathc
+]
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+urlRequest = 'https://indexing.googleapis.com/batch'
+headers = {'Content-type': 'multipart/related; boundary=BOUNDARY'}
+
+request_object = GoogleRequest()
+indexing_account.refresh(request_object)
+
+boundary = 'BOUNDARY'
+body_parts = [f'--{boundary}\nContent-type: application/http\nContent-ID: {index}\n\n{item["body"]}' for index, item in enumerate(items)]
+body = "\n".join(body_parts) + f'\n--{boundary}--\n'
+
+options = {
+    'headers': {
+        'Authorization': f'Bearer {indexing_account.token}',
+        **headers
+    },
+    'data': body
+}
+
+response = requests.post(urlRequest, **options)
+print(response.text)
