@@ -29,7 +29,7 @@ class GoogleIndexingPage:
             for index, url in enumerate(urls)
         ]
 
-        url_request = 'https://indexing.googleapis.com/batch'
+        url_batch = 'https://indexing.googleapis.com/batch'
         headers = {'Content-type': 'multipart/related; boundary=BOUNDARY'}
 
         request_object = GoogleRequest()
@@ -48,11 +48,44 @@ class GoogleIndexingPage:
             'data': body
         }
 
-        response = requests.post(url_request, **options)
+        response = requests.post(url_batch, **options)
         return response.text
 
 
+def check_limit_indexing_api(service_account_file):
+    credent = service_account.Credentials.from_service_account_file(
+        service_account_file,
+        scopes=['https://www.googleapis.com/auth/indexing']
+    )
+
+    ulr_quota = 'https://indexing.googleapis.com/v3/quota'
+    request_quota = GoogleRequest()
+    credent.refresh(request_quota)
+
+    access_token = credent.token
+    headers = {'Authorization': f'Bearer {access_token}'}
+
+    response = requests.get(ulr_quota, headers=headers)
+
+    if response.status_code == 200:
+        data_qouta = response.json()
+        max_daily_requests = data_qouta['quota']['maxDailyRequests']
+        remaining_daily_requests = data_qouta['quota']['remainingDailyRequests']
+        return max_daily_requests, remaining_daily_requests
+    else:
+        error_msg = f"Ошибка при получении данных о лимитах: {response.status_code} - {response.text}"
+        return None, error_msg
+
+
 if __name__ == "__main__":
-    api = GoogleIndexingPage('service_account.json')
-    result = api.listing_index_urls('urls.txt')
-    print(result)
+    max_daily, remaining_daily = check_limit_indexing_api('service_account.json')
+
+    if max_daily is not None:
+        print(f"Количество лимитов Google indexing в сутки: {max_daily}")
+        print(f"Оставшиеся количество на сегодня: {remaining_daily}")
+    else:
+        print({remaining_daily})
+
+    # api = GoogleIndexingPage('service_account.json')
+    # result = api.listing_index_urls('urls.txt')
+    # print(result)
